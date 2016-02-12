@@ -1,7 +1,7 @@
 MAKEFLAGS += --warn-undefined-variables
 IMAGE ?= dliappis/docker_auth
 COMPRESS_BINARY ?= false
-CA_BUNDLE = /etc/ssl/certs/ca-certificates.crt
+CA_BUNDLE = /etc/ssl/certs/ca-bundle.crt
 
 BUILDER_IMAGE ?= centurylink/golang-builder
 BUILDER_IMAGE_EXTRA-build-cross = -cross
