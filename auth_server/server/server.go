@@ -100,10 +100,10 @@ func NewAuthServer(c *Config) (*AuthServer, error) {
 
 func parseRemoteAddr(ra string) net.IP {
 	colonIndex := strings.LastIndex(ra, ":")
-	if colonIndex == -1 {
-		return nil
+	if colonIndex != -1 {
+		ra = ra[:colonIndex]
 	}
-	ra = ra[:colonIndex]
+
 	if ra[0] == '[' && ra[len(ra)-1] == ']' { // IPv6
 		ra = ra[1 : len(ra)-1]
 	}
@@ -112,10 +112,19 @@ func parseRemoteAddr(ra string) net.IP {
 }
 
 func (as *AuthServer) ParseRequest(req *http.Request) (*AuthRequest, error) {
-	ar := &AuthRequest{RemoteAddr: req.RemoteAddr}
-	ar.ai.IP = parseRemoteAddr(req.RemoteAddr)
+	// Check for X-Forwarded-For sent by ELBs, proxies etc
+	var tempRemoteAddr string
+	xforwardedheader := req.Header.Get("X-Forwarded-For")
+	if xforwardedheader == "" {
+		tempRemoteAddr = req.RemoteAddr
+	} else {
+		tempRemoteAddr = strings.Split(xforwardedheader, ", ")[0] // Get only first entry for now
+	}
+
+	ar := &AuthRequest{RemoteAddr: tempRemoteAddr}
+	ar.ai.IP = parseRemoteAddr(tempRemoteAddr)
 	if ar.ai.IP == nil {
-		return nil, fmt.Errorf("unable to parse remote addr %s", req.RemoteAddr)
+		return nil, fmt.Errorf("unable to parse remote addr %s", tempRemoteAddr)
 	}
 	user, password, haveBasicAuth := req.BasicAuth()
 	if haveBasicAuth {
