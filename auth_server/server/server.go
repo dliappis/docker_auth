@@ -236,7 +236,23 @@ func (as *AuthServer) CreateToken(ar *AuthRequest, actions []string) (string, er
 	if err != nil || sigAlg2 != sigAlg {
 		return "", fmt.Errorf("failed to sign token: %s", err)
 	}
-	glog.Infof("New token for %s: %s", *ar, claimsJSON)
+
+	// log_new_token, _ := json.Marshal(LogData{
+	// 	Operation:  "tokencreate",
+	// 	Result:     "succeeded",
+	// 	User:       ar.User,
+	// 	RemoteAddr: ar.RemoteAddr,
+	// 	Account:    ar.ai.Account,
+	// 	Type:       ar.ai.Type,
+	// 	Name:       ar.ai.Name,
+	// 	Service:    ar.ai.Service,
+	// 	Actions:    ar.ai.Actions,
+	// 	Issuer:     claims.Issuer,
+	// 	IssuedAt:   claims.IssuedAt,
+	// 	Expiration: claims.Expiration,
+	// })
+	// Optionally print also token
+	// fmt.Println(string(log_new_token))
 	return fmt.Sprintf("%s%s%s", payload, token.TokenSeparator, joseBase64UrlEncode(sig)), nil
 }
 
@@ -264,6 +280,23 @@ func (as *AuthServer) doIndex(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
+type LogData struct {
+	Operation  string   `json:"operation"`
+	Result     string   `json:"result"`
+	Reason     string   `json:"reason,omitempty"`
+	Details    string   `json:"details,omitempty"`
+	User       string   `json:"user,omitempty"`
+	RemoteAddr string   `json:"remoteaddr"`
+	Account    string   `json:"account,omitempty"`
+	Issuer     string   `json:"tokenissuer,omitempty"`
+	IssuedAt   int64    `json:"issuedate,omitempty"`
+	Expiration int64    `json:"expiration,omitempty"`
+	Type       string   `json:"type,omitempty"`
+	Name       string   `json:"name,omitempty"`
+	Service    string   `json:"service,omitempty"`
+	Actions    []string `json:"actions,omitempty"`
+}
+
 func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 	ar, err := as.ParseRequest(req)
 	authorizedActions := []string{}
@@ -277,28 +310,122 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 		authnResult, err := as.Authenticate(ar)
 		if err != nil {
 			http.Error(rw, fmt.Sprintf("Authentication failed (%s)", err), http.StatusInternalServerError)
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "InternalServerError",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.ai.Account,
+				Type:       ar.ai.Type,
+				Name:       ar.ai.Name,
+				Service:    ar.ai.Service,
+				Actions:    ar.ai.Actions,
+			})
+			fmt.Println(string(authlog))
 			return
 		}
 		if !authnResult {
 			glog.Warningf("Auth failed: %s", *ar)
 			http.Error(rw, "Auth failed.", http.StatusUnauthorized)
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "Unauthorized",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.ai.Account,
+				Type:       ar.ai.Type,
+				Name:       ar.ai.Name,
+				Service:    ar.ai.Service,
+				Actions:    ar.ai.Actions,
+			})
+			fmt.Println(string(authlog))
 			return
 		}
 	}
 	if len(ar.ai.Actions) > 0 {
 		authorizedActions, err = as.Authorize(ar)
-		if err != nil {
+		if authorizedActions == nil || len(authorizedActions) == 0 {
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "No authz rule was matched",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.ai.Account,
+				Type:       ar.ai.Type,
+				Name:       ar.ai.Name,
+				Service:    ar.ai.Service,
+				Actions:    ar.ai.Actions,
+			})
+			fmt.Println(string(authlog))
+		} else if err != nil {
 			http.Error(rw, fmt.Sprintf("Authorization failed (%s)", err), http.StatusInternalServerError)
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "InternalServerError",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.ai.Account,
+				Type:       ar.ai.Type,
+				Name:       ar.ai.Name,
+				Service:    ar.ai.Service,
+				Actions:    ar.ai.Actions,
+			})
+			fmt.Println(string(authlog))
 			return
+		} else {
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "succeeded",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.ai.Account,
+				Type:       ar.ai.Type,
+				Name:       ar.ai.Name,
+				Service:    ar.ai.Service,
+				Actions:    ar.ai.Actions,
+			})
+			fmt.Println(string(authlog))
 		}
 	} else {
-		// Authenticaltion-only request ("docker login"), pass through.
+		// Authentication-only request ("docker login"), pass through.
+		authlog, _ := json.Marshal(LogData{
+			Operation:  "authentication",
+			Result:     "succeeded",
+			Reason:     "docker login only request succeeded",
+			User:       ar.User,
+			RemoteAddr: ar.RemoteAddr,
+			Account:    ar.ai.Account,
+			Type:       ar.ai.Type,
+			Name:       ar.ai.Name,
+			Service:    ar.ai.Service,
+			Actions:    ar.ai.Actions,
+		})
+		fmt.Println(string(authlog))
 	}
+
 	token, err := as.CreateToken(ar, authorizedActions)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to generate token %s", err)
 		http.Error(rw, msg, http.StatusInternalServerError)
 		glog.Errorf("%s: %s", ar, msg)
+		authlog, _ := json.Marshal(LogData{
+			Operation:  "tokencreate",
+			Result:     "failed",
+			Reason:     "InternalServerError",
+			Details:    msg,
+			User:       ar.User,
+			RemoteAddr: ar.RemoteAddr,
+			Account:    ar.ai.Account,
+			Type:       ar.ai.Type,
+			Name:       ar.ai.Name,
+			Service:    ar.ai.Service,
+			Actions:    ar.ai.Actions,
+		})
+		fmt.Println(string(authlog))
 		return
 	}
 	result, _ := json.Marshal(&map[string]string{"token": token})
