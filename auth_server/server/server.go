@@ -186,7 +186,9 @@ func (as *AuthServer) Authorize(ar *AuthRequest) ([]string, error) {
 		return result, nil
 	}
 	// Deny by default.
-	glog.Warningf("%s did not match any authz rule", ar.ai)
+	// TODO evaluate if it is safe to completely eliminate the following
+	// now that we are generating json logs
+	// glog.Warningf("%s did not match any authz rule", ar.ai)
 	return nil, nil
 }
 
@@ -295,6 +297,7 @@ type LogData struct {
 	Name       string   `json:"name,omitempty"`
 	Service    string   `json:"service,omitempty"`
 	Actions    []string `json:"actions,omitempty"`
+	Time       string   `json:"time"`
 }
 
 func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
@@ -321,6 +324,7 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 				Name:       ar.ai.Name,
 				Service:    ar.ai.Service,
 				Actions:    ar.ai.Actions,
+				Time:       time.Now().Format(time.RFC3339Nano),
 			})
 			fmt.Println(string(authlog))
 			return
@@ -339,6 +343,7 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 				Name:       ar.ai.Name,
 				Service:    ar.ai.Service,
 				Actions:    ar.ai.Actions,
+				Time:       time.Now().Format(time.RFC3339Nano),
 			})
 			fmt.Println(string(authlog))
 			return
@@ -358,6 +363,7 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 				Name:       ar.ai.Name,
 				Service:    ar.ai.Service,
 				Actions:    ar.ai.Actions,
+				Time:       time.Now().Format(time.RFC3339Nano),
 			})
 			fmt.Println(string(authlog))
 		} else if err != nil {
@@ -373,6 +379,7 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 				Name:       ar.ai.Name,
 				Service:    ar.ai.Service,
 				Actions:    ar.ai.Actions,
+				Time:       time.Now().Format(time.RFC3339Nano),
 			})
 			fmt.Println(string(authlog))
 			return
@@ -387,6 +394,7 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 				Name:       ar.ai.Name,
 				Service:    ar.ai.Service,
 				Actions:    ar.ai.Actions,
+				Time:       time.Now().Format(time.RFC3339Nano),
 			})
 			fmt.Println(string(authlog))
 		}
@@ -403,6 +411,7 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 			Name:       ar.ai.Name,
 			Service:    ar.ai.Service,
 			Actions:    ar.ai.Actions,
+			Time:       time.Now().Format(time.RFC3339Nano),
 		})
 		fmt.Println(string(authlog))
 	}
@@ -424,6 +433,7 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 			Name:       ar.ai.Name,
 			Service:    ar.ai.Service,
 			Actions:    ar.ai.Actions,
+			Time:       time.Now().Format(time.RFC3339Nano),
 		})
 		fmt.Println(string(authlog))
 		return
