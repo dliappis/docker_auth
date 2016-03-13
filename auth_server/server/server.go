@@ -135,7 +135,7 @@ func (as *AuthServer) ParseRequest(req *http.Request) (*authRequest, error) {
 		tempRemoteAddr = strings.Split(xforwardedheader, ", ")[0] // Get only first entry for now
 	}
 
-	ar := &AuthRequest{RemoteAddr: tempRemoteAddr}
+	ar := &authRequest{RemoteAddr: tempRemoteAddr}
 	ar.RemoteIP = parseRemoteAddr(tempRemoteAddr)
 	if ar.RemoteIP == nil {
 		return nil, fmt.Errorf("unable to parse remote addr %s", tempRemoteAddr)
@@ -340,7 +340,7 @@ type LogData struct {
 	Expiration int64       `json:"expiration,omitempty"`
 	Account    string      `json:"account,omitempty"`
 	Service    string      `json:"service,omitempty"`
-	Scopes     []authscope `json:"actions,omitempty"`
+	Scopes     []authScope `json:"actions,omitempty"`
 	Time       string      `json:"time"`
 }
 
