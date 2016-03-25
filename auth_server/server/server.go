@@ -284,23 +284,7 @@ func (as *AuthServer) CreateToken(ar *authRequest, ares []authzResult) (string, 
 	if err != nil || sigAlg2 != sigAlg {
 		return "", fmt.Errorf("failed to sign token: %s", err)
 	}
-
-	// log_new_token, _ := json.Marshal(LogData{
-	// 	Operation:  "tokencreate",
-	// 	Result:     "succeeded",
-	// 	User:       ar.User,
-	// 	RemoteAddr: ar.RemoteAddr,
-	// 	Account:    ar.ai.Account,
-	// 	Type:       ar.ai.Type,
-	// 	Name:       ar.ai.Name,
-	// 	Service:    ar.ai.Service,
-	// 	Actions:    ar.ai.Actions,
-	// 	Issuer:     claims.Issuer,
-	// 	IssuedAt:   claims.IssuedAt,
-	// 	Expiration: claims.Expiration,
-	// })
-	// Optionally print also token
-	// fmt.Println(string(log_new_token))
+	glog.Infof("New token for %s: %s", *ar, claimsJSON)
 	return fmt.Sprintf("%s%s%s", payload, token.TokenSeparator, joseBase64UrlEncode(sig)), nil
 }
 
@@ -333,7 +317,7 @@ type LogData struct {
 	Result     string      `json:"result"`
 	Reason     string      `json:"reason,omitempty"`
 	Details    string      `json:"details,omitempty"`
-	User       string      `json:"user,omitempty"`
+	User       string      `json:"user"`
 	RemoteAddr string      `json:"remoteaddr"`
 	Issuer     string      `json:"tokenissuer,omitempty"`
 	IssuedAt   int64       `json:"issuedate,omitempty"`
@@ -350,6 +334,18 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		glog.Warningf("Bad request: %s", err)
 		http.Error(rw, fmt.Sprintf("Bad request: %s", err), http.StatusBadRequest)
+		authlog, _ := json.Marshal(LogData{
+			Operation:  "authentication",
+			Result:     "failed",
+			Reason:     "Bad Request",
+			User:       ar.User,
+			RemoteAddr: ar.RemoteAddr,
+			Account:    ar.Account,
+			Service:    ar.Service,
+			Scopes:     ar.Scopes,
+			Time:       time.Now().Format(time.RFC3339Nano),
+		})
+		fmt.Println(string(authlog))
 		return
 	}
 	glog.V(2).Infof("Auth request: %+v", ar)
@@ -434,11 +430,16 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 		}
 	} else {
 		// Authentication-only request ("docker login"), pass through.
+		actualuser := ar.User
+		if ar.User == "" {
+			// Anonymous login only request
+			actualuser = "anonymous"
+		}
 		authlog, _ := json.Marshal(LogData{
 			Operation:  "authentication",
 			Result:     "succeeded",
 			Reason:     "docker login only request succeeded",
-			User:       ar.User,
+			User:       actualuser,
 			RemoteAddr: ar.RemoteAddr,
 			Account:    ar.Account,
 			Service:    ar.Service,
@@ -447,7 +448,6 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 		})
 		fmt.Println(string(authlog))
 	}
-
 	token, err := as.CreateToken(ar, ares)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to generate token %s", err)
