@@ -7,6 +7,7 @@ VERSION = $(shell cat version.txt)
 BUILDER_IMAGE ?= golang:1.8.0-alpine
 CUSTOM_BUILDER_IMAGE ?= docker-auth-build-image:latest
 
+
 .PHONY: %
 
 all: build
