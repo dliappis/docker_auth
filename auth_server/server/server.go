@@ -360,12 +360,42 @@ func (as *AuthServer) doIndex(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
+type LogData struct {
+	Account    string      `json:"account,omitempty"`
+	Actions    []authScope `json:"actions,omitempty"`
+	Details    string      `json:"details,omitempty"`
+	Expiration int64       `json:"expiration,omitempty"`
+	IssuedAt   int64       `json:"issuedate,omitempty"`
+	Issuer     string      `json:"tokenissuer,omitempty"`
+	Name       string      `json:"name,omitempty"`
+	Operation  string      `json:"operation"`
+	Reason     string      `json:"reason,omitempty"`
+	RemoteAddr string      `json:"remoteaddr"`
+	Result     string      `json:"result"`
+	Service    string      `json:"service,omitempty"`
+	Time       string      `json:"time"`
+	Type       string      `json:"type,omitempty"`
+	User       string      `json:"user"`
+}
+
 func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 	ar, err := as.ParseRequest(req)
 	ares := []authzResult{}
 	if err != nil {
 		glog.Warningf("Bad request: %s", err)
 		http.Error(rw, fmt.Sprintf("Bad request: %s", err), http.StatusBadRequest)
+		authlog, _ := json.Marshal(LogData{
+			Operation:  "authentication",
+			Result:     "failed",
+			Reason:     "Bad Request",
+			User:       ar.User,
+			RemoteAddr: ar.RemoteAddr,
+			Account:    ar.Account,
+			Service:    ar.Service,
+			Actions:    ar.Scopes,
+			Time:       time.Now().Format(time.RFC3339Nano),
+		})
+		fmt.Println(string(authlog))
 		return
 	}
 	glog.V(2).Infof("Auth request: %+v", ar)
@@ -373,30 +403,121 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 		authnResult, labels, err := as.Authenticate(ar)
 		if err != nil {
 			http.Error(rw, fmt.Sprintf("Authentication failed (%s)", err), http.StatusInternalServerError)
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "InternalServerError",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.Account,
+				Service:    ar.Service,
+				Actions:    ar.Scopes,
+				Time:       time.Now().Format(time.RFC3339Nano),
+			})
+			fmt.Println(string(authlog))
 			return
 		}
 		if !authnResult {
 			glog.Warningf("Auth failed: %s", *ar)
 			rw.Header()["WWW-Authenticate"] = []string{fmt.Sprintf(`Basic realm="%s"`, as.config.Token.Issuer)}
 			http.Error(rw, "Auth failed.", http.StatusUnauthorized)
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "Unauthorized",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.Account,
+				Service:    ar.Service,
+				Actions:    ar.Scopes,
+				Time:       time.Now().Format(time.RFC3339Nano),
+			})
+			fmt.Println(string(authlog))
 			return
 		}
 		ar.Labels = labels
 	}
 	if len(ar.Scopes) > 0 {
 		ares, err = as.Authorize(ar)
-		if err != nil {
+		if ares == nil || len(ares) == 0 {
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "No authz rule was matched",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.Account,
+				Service:    ar.Service,
+				Actions:    ar.Scopes,
+				Time:       time.Now().Format(time.RFC3339Nano),
+			})
+			fmt.Println(string(authlog))
+		} else if err != nil {
 			http.Error(rw, fmt.Sprintf("Authorization failed (%s)", err), http.StatusInternalServerError)
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "InternalServerError",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.Account,
+				Service:    ar.Service,
+				Actions:    ar.Scopes,
+				Time:       time.Now().Format(time.RFC3339Nano),
+			})
+			fmt.Println(string(authlog))
 			return
+		} else {
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "succeeded",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.Account,
+				Service:    ar.Service,
+				Actions:    ar.Scopes,
+				Time:       time.Now().Format(time.RFC3339Nano),
+			})
+			fmt.Println(string(authlog))
 		}
 	} else {
 		// Authentication-only request ("docker login"), pass through.
+		actualuser := ar.User
+		if ar.User == "" {
+			// Anonymous login only request
+			actualuser = "anonymous"
+		}
+		authlog, _ := json.Marshal(LogData{
+			Operation:  "authentication",
+			Result:     "succeeded",
+			Reason:     "docker login only request succeeded",
+			User:       actualuser,
+			RemoteAddr: ar.RemoteAddr,
+			Account:    ar.Account,
+			Service:    ar.Service,
+			Actions:    ar.Scopes,
+			Time:       time.Now().Format(time.RFC3339Nano),
+		})
+		fmt.Println(string(authlog))
 	}
 	token, err := as.CreateToken(ar, ares)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to generate token %s", err)
 		http.Error(rw, msg, http.StatusInternalServerError)
 		glog.Errorf("%s: %s", ar, msg)
+		authlog, _ := json.Marshal(LogData{
+			Operation:  "tokencreate",
+			Result:     "failed",
+			Reason:     "InternalServerError",
+			Details:    msg,
+			User:       ar.User,
+			RemoteAddr: ar.RemoteAddr,
+			Account:    ar.Account,
+			Service:    ar.Service,
+			Actions:    ar.Scopes,
+			Time:       time.Now().Format(time.RFC3339Nano),
+		})
+		fmt.Println(string(authlog))
 		return
 	}
 	result, _ := json.Marshal(&map[string]string{"token": token})
