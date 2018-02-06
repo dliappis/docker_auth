@@ -177,7 +177,9 @@ func (as *AuthServer) Authorize(ar *AuthRequest) ([]string, error) {
 		return result, nil
 	}
 	// Deny by default.
-	glog.Warningf("%s did not match any authz rule", ar.ai)
+	// TODO evaluate if it is safe to completely eliminate the following
+	// now that we are generating json logs
+	// glog.Warningf("%s did not match any authz rule", ar.ai)
 	return nil, nil
 }
 
@@ -255,12 +257,42 @@ func (as *AuthServer) doIndex(rw http.ResponseWriter, req *http.Request) {
 	}
 }
 
+type LogData struct {
+	Account    string      `json:"account,omitempty"`
+	Details    string      `json:"details,omitempty"`
+	Expiration int64       `json:"expiration,omitempty"`
+	IssuedAt   int64       `json:"issuedate,omitempty"`
+	Issuer     string      `json:"tokenissuer,omitempty"`
+	Name       string      `json:"name,omitempty"`
+	Operation  string      `json:"operation"`
+	Reason     string      `json:"reason,omitempty"`
+	RemoteAddr string      `json:"remoteaddr"`
+	Result     string      `json:"result"`
+	Scopes     []authScope `json:"actions,omitempty"`
+	Service    string      `json:"service,omitempty"`
+	Time       string      `json:"time"`
+	Type       string      `json:"type,omitempty"`
+	User       string      `json:"user"`
+}
+
 func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 	ar, err := as.ParseRequest(req)
 	authorizedActions := []string{}
 	if err != nil {
 		glog.Warningf("Bad request: %s", err)
 		http.Error(rw, fmt.Sprintf("Bad request: %s", err), http.StatusBadRequest)
+		authlog, _ := json.Marshal(LogData{
+			Operation:  "authentication",
+			Result:     "failed",
+			Reason:     "Bad Request",
+			User:       ar.User,
+			RemoteAddr: ar.RemoteAddr,
+			Account:    ar.Account,
+			Service:    ar.Service,
+			Scopes:     ar.Scopes,
+			Time:       time.Now().Format(time.RFC3339Nano),
+		})
+		fmt.Println(string(authlog))
 		return
 	}
 	glog.V(2).Infof("Auth request: %+v", ar)
@@ -268,28 +300,133 @@ func (as *AuthServer) doAuth(rw http.ResponseWriter, req *http.Request) {
 		authnResult, err := as.Authenticate(ar)
 		if err != nil {
 			http.Error(rw, fmt.Sprintf("Authentication failed (%s)", err), http.StatusInternalServerError)
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "InternalServerError",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.ai.Account,
+				Type:       ar.ai.Type,
+				Name:       ar.ai.Name,
+				Service:    ar.ai.Service,
+				Actions:    ar.ai.Actions,
+				Time:       time.Now().Format(time.RFC3339Nano),
+			})
+			fmt.Println(string(authlog))
 			return
 		}
 		if !authnResult {
 			glog.Warningf("Auth failed: %s", *ar)
 			http.Error(rw, "Auth failed.", http.StatusUnauthorized)
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "Unauthorized",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.ai.Account,
+				Type:       ar.ai.Type,
+				Name:       ar.ai.Name,
+				Service:    ar.ai.Service,
+				Actions:    ar.ai.Actions,
+				Time:       time.Now().Format(time.RFC3339Nano),
+			})
+			fmt.Println(string(authlog))
 			return
 		}
 	}
 	if len(ar.ai.Actions) > 0 {
 		authorizedActions, err = as.Authorize(ar)
-		if err != nil {
+		if authorizedActions == nil || len(authorizedActions) == 0 {
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "No authz rule was matched",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.ai.Account,
+				Type:       ar.ai.Type,
+				Name:       ar.ai.Name,
+				Service:    ar.ai.Service,
+				Actions:    ar.ai.Actions,
+				Time:       time.Now().Format(time.RFC3339Nano),
+			})
+			fmt.Println(string(authlog))
+		} else if err != nil {
 			http.Error(rw, fmt.Sprintf("Authorization failed (%s)", err), http.StatusInternalServerError)
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "failed",
+				Reason:     "InternalServerError",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.ai.Account,
+				Type:       ar.ai.Type,
+				Name:       ar.ai.Name,
+				Service:    ar.ai.Service,
+				Actions:    ar.ai.Actions,
+				Time:       time.Now().Format(time.RFC3339Nano),
+			})
+			fmt.Println(string(authlog))
 			return
+		} else {
+			authlog, _ := json.Marshal(LogData{
+				Operation:  "authentication",
+				Result:     "succeeded",
+				User:       ar.User,
+				RemoteAddr: ar.RemoteAddr,
+				Account:    ar.ai.Account,
+				Type:       ar.ai.Type,
+				Name:       ar.ai.Name,
+				Service:    ar.ai.Service,
+				Actions:    ar.ai.Actions,
+				Time:       time.Now().Format(time.RFC3339Nano),
+			})
+			fmt.Println(string(authlog))
 		}
 	} else {
-		// Authenticaltion-only request ("docker login"), pass through.
+		// Authentication-only request ("docker login"), pass through.
+		actualuser := ar.User
+		if ar.User == "" {
+			// Anonymous login only request
+			actualuser = "anonymous"
+		}
+		authlog, _ := json.Marshal(LogData{
+			Operation:  "authentication",
+			Result:     "succeeded",
+			Reason:     "docker login only request succeeded",
+			User:       actualuser,
+			RemoteAddr: ar.RemoteAddr,
+			Account:    ar.ai.Account,
+			Type:       ar.ai.Type,
+			Name:       ar.ai.Name,
+			Service:    ar.ai.Service,
+			Actions:    ar.ai.Actions,
+			Time:       time.Now().Format(time.RFC3339Nano),
+		})
+		fmt.Println(string(authlog))
 	}
-	token, err := as.CreateToken(ar, authorizedActions)
+	token, err := as.CreateToken(ar, ares)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to generate token %s", err)
 		http.Error(rw, msg, http.StatusInternalServerError)
 		glog.Errorf("%s: %s", ar, msg)
+		authlog, _ := json.Marshal(LogData{
+			Operation:  "tokencreate",
+			Result:     "failed",
+			Reason:     "InternalServerError",
+			Details:    msg,
+			User:       ar.User,
+			RemoteAddr: ar.RemoteAddr,
+			Account:    ar.ai.Account,
+			Type:       ar.ai.Type,
+			Name:       ar.ai.Name,
+			Service:    ar.ai.Service,
+			Actions:    ar.ai.Actions,
+			Time:       time.Now().Format(time.RFC3339Nano),
+		})
+		fmt.Println(string(authlog))
 		return
 	}
 	result, _ := json.Marshal(&map[string]string{"token": token})
