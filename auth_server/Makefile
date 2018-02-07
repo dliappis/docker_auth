@@ -13,7 +13,7 @@ all: build
 deps:
 	go get -v -u github.com/kardianos/govendor
 	govendor sync
-	go install -v github.com/cesanta/docker_auth/auth_server/vendor/github.com/jteeuwen/go-bindata/go-bindata
+	go install -v github.com/cesanta/docker_auth/auth_server/vendor/github.com/dliappis/go-bindata/go-bindata
 
 generate:
 	go generate \
@@ -36,7 +36,7 @@ build-release: ca-certificates.crt
 	    cd /go/src/github.com/cesanta/docker_auth/auth_server && \
 	    go get -v -u github.com/kardianos/govendor && \
 	    umask 0 && govendor sync -v && \
-	    go install -v github.com/cesanta/docker_auth/auth_server/vendor/github.com/jteeuwen/go-bindata/go-bindata && \
+	    go install -v github.com/cesanta/docker_auth/auth_server/vendor/github.com/dliappis/go-bindata/go-bindata && \
 	    make generate && \
 	    CGO_ENABLED=0 go build -v -i --ldflags=--s"
 	@echo === Built version $(VERSION) ===
