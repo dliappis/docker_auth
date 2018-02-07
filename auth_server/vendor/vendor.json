@@ -104,6 +104,18 @@
 			"revisionTime": "2017-02-02T20:30:32Z"
 		},
 		{
+			"checksumSHA1": "fW7uZ9Zw5IJ4Imx+MO9GjOyMCGg=",
+			"path": "github.com/dliappis/go-bindata",
+			"revision": "8ea16ec0d08b35c25df1af925861b5c5d6a53356",
+			"revisionTime": "2018-02-07T11:49:53Z"
+		},
+		{
+			"checksumSHA1": "PdMcDCP3w3uRj5hs6aWeUJNpkpg=",
+			"path": "github.com/dliappis/go-bindata/go-bindata",
+			"revision": "8ea16ec0d08b35c25df1af925861b5c5d6a53356",
+			"revisionTime": "2018-02-07T11:49:53Z"
+		},
+		{
 			"checksumSHA1": "rAbbq6Q42Svc1VuHABqk4Xin4vM=",
 			"path": "github.com/docker/distribution/context",
 			"revision": "0700fa570d7bcc1b3e46ee127c4489fd25f4daa3",
@@ -196,6 +208,12 @@
 		{
 			"checksumSHA1": "1G3rrFblhLysqMXp7C5nbPCzKeM=",
 			"path": "github.com/go-redis/redis",
+			"revision": "8b4fa6d443e35ca8b1c37be877285252430b06a3",
+			"revisionTime": "2018-01-20T10:26:33Z"
+		},
+		{
+			"checksumSHA1": "7lRGhy5dEKceTTSb7pcyPWB8CPE=",
+			"path": "github.com/go-redis/redis/internal",
 			"revision": "8b4fa6d443e35ca8b1c37be877285252430b06a3",
 			"revisionTime": "2018-01-20T10:26:33Z"
 		},
@@ -314,18 +332,6 @@
 			"path": "github.com/gorilla/mux",
 			"revision": "0700fa570d7bcc1b3e46ee127c4489fd25f4daa3",
 			"revisionTime": "2017-03-21T17:14:25Z"
-		},
-		{
-			"checksumSHA1": "LAqhkCywKqkTvAu+MbIRnpeFnZA=",
-			"path": "github.com/jteeuwen/go-bindata",
-			"revision": "a0ff2567cfb70903282db057e799fd826784d41d",
-			"revisionTime": "2015-10-23T09:11:02Z"
-		},
-		{
-			"checksumSHA1": "1E4XSPmZqO/s20/WWJKXsyGTfm4=",
-			"path": "github.com/jteeuwen/go-bindata/go-bindata",
-			"revision": "a0ff2567cfb70903282db057e799fd826784d41d",
-			"revisionTime": "2015-10-23T09:11:02Z"
 		},
 		{
 			"checksumSHA1": "qafPKAxcGTNAL1S6Ly6hs4hVT8k=",
