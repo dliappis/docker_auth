@@ -1,10 +1,11 @@
 MAKEFLAGS += --warn-undefined-variables
 IMAGE ?= cesanta/docker_auth
 COMPRESS_BINARY ?= false
-CA_BUNDLE = /etc/ssl/certs/ca-certificates.crt
+CA_BUNDLE ?= /etc/ssl/certs/ca-certificates.crt
 VERSION = $(shell cat version.txt)
 
 BUILDER_IMAGE ?= golang:1.8.0-alpine
+CUSTOM_BUILDER_IMAGE ?= docker-auth-build-image:latest
 
 .PHONY: %
 
@@ -27,15 +28,35 @@ build:
 	CGO_ENABLED=0 go build -v -i --ldflags=--s
 
 ca-certificates.crt:
-	cp $(CA_BUNDLE) .
+	cp $(CA_BUNDLE) ./ca-certificates.crt
 
-build-release: ca-certificates.crt
+custom-image:
+	docker build -t $(CUSTOM_BUILDER_IMAGE) -f ./Dockerfile-builderimage .
+
+# Download vendor.json dependencies under vendor/ on the host
+pull-vendor-deps:
 	docker run --rm -v $(PWD)/..:/go/src/github.com/cesanta/docker_auth \
-	  $(BUILDER_IMAGE) sh -x -c "\
-	    apk update && apk add git make py2-pip && pip install GitPython && \
+	  $(CUSTOM_BUILDER_IMAGE) sh -x -c "\
 	    cd /go/src/github.com/cesanta/docker_auth/auth_server && \
 	    go get -v -u github.com/kardianos/govendor && \
 	    umask 0 && govendor sync -v && \
+	    go install -v github.com/cesanta/docker_auth/auth_server/vendor/github.com/jteeuwen/go-bindata/go-bindata && \
+	    umask 0 && govendor sync -v"
+
+# Build fast with docker; assumes you've already run `pull-vendor-deps`
+build-release-fast: ca-certificates.crt
+	docker run --rm -v $(PWD)/..:/go/src/github.com/cesanta/docker_auth \
+	  $(CUSTOM_BUILDER_IMAGE) sh -x -c "\
+	    cd /go/src/github.com/cesanta/docker_auth/auth_server && \
+	    go install -v github.com/cesanta/docker_auth/auth_server/vendor/github.com/jteeuwen/go-bindata/go-bindata && \
+	    make generate && \
+	    CGO_ENABLED=0 go build -v -i --ldflags=--s"
+	@echo === Built version $(VERSION) ===
+
+build-release: ca-certificates.crt pull-vendor-deps
+	docker run --rm -v $(PWD)/..:/go/src/github.com/cesanta/docker_auth \
+	  $(CUSTOM_BUILDER_IMAGE) sh -x -c "\
+	    cd /go/src/github.com/cesanta/docker_auth/auth_server && \
 	    go install -v github.com/cesanta/docker_auth/auth_server/vendor/github.com/jteeuwen/go-bindata/go-bindata && \
 	    make generate && \
 	    CGO_ENABLED=0 go build -v -i --ldflags=--s"
